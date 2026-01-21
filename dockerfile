@@ -1,30 +1,41 @@
-# Sử dụng Node.js 22 (latest stable LTS) trên Alpine nhẹ
-FROM node:22-alpine
+# Base Python slim (nhẹ, Debian-based, dễ install Node)
+FROM python:3.12-slim
 
-# Cài ffmpeg mới nhất + các lib cần thiết
-RUN apk update && apk add --no-cache \
+# Cài dependencies hệ thống + FFmpeg mới nhất
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
     ffmpeg \
-    && rm -rf /var/cache/apk/*
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# (Nếu cần ffmpeg full features hơn, dùng base Debian và compile hoặc apt)
-# FROM node:22-slim
-# RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+# Install Node.js LTS mới nhất (từ nodesource, evergreen ~22.x)
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest  # update npm nếu cần
 
-# Tạo user non-root (HF khuyến nghị UID 1000)
-RUN addgroup -g 1000 appgroup && adduser -u 1000 -G appgroup -D appuser
-USER appuser
-WORKDIR /home/appuser/app
+# Kiểm tra versions (debug)
+RUN node --version && npm --version && python --version && ffmpeg -version
 
-# Copy package files trước để cache layer npm install
-COPY --chown=appuser:appgroup package*.json ./
-RUN npm ci --omit=dev   # Hoặc npm install nếu cần dev deps
+# Set working dir
+WORKDIR /app
+
+# Copy và install Python deps trước (cache tốt)
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy và install Node deps
+COPY package*.json ./
+RUN npm ci  # hoặc npm install
 
 # Copy toàn bộ code
-COPY --chown=appuser:appgroup . .
+COPY . .
 
-# Expose port (HF Spaces dùng 7860 mặc định)
+# Expose port cho HF Spaces
 EXPOSE 7860
 
-# Command chạy app (thay bằng của bạn: node server.js, npm start, node index.js,...)
-CMD ["npm", "start"]
-# Hoặc CMD ["node", "server.js"]
+# CMD chạy app chính (thay bằng của bạn)
+# Ví dụ: Python FastAPI/Gradio-like
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Hoặc Node: CMD ["npm", "start"]
+# Hoặc hybrid: một script shell chạy cả 2 nếu cần (nhưng tránh)

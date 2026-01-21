@@ -18,5 +18,5 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.huggingface }}
         run: |
-          git push https://megaphuongdo:$HF_TOKEN@huggingface.co/spaces/megaphuongdo@gmail.com/stming_dc main --force
+          git push https://megaphuongdo:$HF_TOKEN@huggingface.co/spaces/megaphuongdo/stming_dc main --force
           # --force để ghi đè, tránh conflict nếu edit trực tiếp trên Space

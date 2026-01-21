@@ -8,11 +8,5 @@ app_port: 7860               # Port mà app của bạn listen (mặc định 78
 short_description: Một Space chạy Node.js mới nhất + FFmpeg để xử lý video/audio, API hoặc web app
 license: apache-2.0          # Hoặc mit, cc-by-4.0, v.v. tùy bạn
 pinned: false
-{{#pythonVersion}}
-python_version: "3.10"
-{{/pythonVersion}}
-custom_headers:
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp   # Nếu cần dùng SharedArrayBuffer hoặc tính năng nâng cao
-app_file:main.py
+app_file: main.py
 ---

@@ -36,6 +36,6 @@ EXPOSE 7860
 
 # CMD chạy app chính (thay bằng của bạn)
 # Ví dụ: Python FastAPI/Gradio-like
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
 # Hoặc Node: CMD ["npm", "start"]
 # Hoặc hybrid: một script shell chạy cả 2 nếu cần (nhưng tránh)

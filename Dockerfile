@@ -16,7 +16,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
 
 # Kiểm tra versions (debug)
 RUN node --version && npm --version && python --version && ffmpeg -version
+RUN apt-get update && apt-get install -y --no-install-recommends supervisor \
+    && rm -rf /var/lib/apt/lists/*
 
+# Copy file config supervisor
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Set working dir
 WORKDIR /app
 

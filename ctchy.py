@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import re
-from tkinter.constants import W
 
 from dotenv import load_dotenv
 

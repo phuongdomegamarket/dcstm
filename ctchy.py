@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+from tkinter.constants import W
 
 from dotenv import load_dotenv
 
@@ -28,6 +29,7 @@ current_voice_client = None
 CHANNELS = None
 HISTORY_CHANNEL = None
 GUILD = None
+WATCH_ON_CHANNEL = os.getenv("WATCH_ON_CHANNEL")
 
 processed_threads = set()
 
@@ -80,7 +82,7 @@ async def periodic_api_check(guild):
         lastThreads = None
         historyChannel = None
         for channel in CHANNELS:
-            if channel.name.lower() == "acb":
+            if channel.name.lower() == WATCH_ON_CHANNEL:
                 pattern = re.compile(
                     r"""
                     ^\s*

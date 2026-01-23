@@ -26,7 +26,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Biến global để lưu voice client hiện tại (nếu bot join 1 channel duy nhất)
 current_voice_client = None
 CHANNELS = None
-HISTORY_CHANNEL = None
+HISTORY_CHANNEL = os.getenv("HISTORY_CHANNEL")
 GUILD = None
 WATCH_ON_CHANNEL = os.getenv("WATCH_ON_CHANNEL")
 
@@ -114,7 +114,7 @@ async def periodic_api_check(guild):
                     )
                 entries.sort(key=lambda e: e["timestamp"])
                 lastThreads = entries[-20:]
-            elif channel.name.lower() == "history":
+            elif channel.name.lower() == HISTORY_CHANNEL:
                 historyChannel = channel
         if historyChannel:
             historyChannel = await guild.fetch_channel(historyChannel.id)

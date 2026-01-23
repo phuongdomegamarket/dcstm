@@ -181,7 +181,9 @@ async def periodic_api_check(guild):
                         ffmpeg_options = {"options": "-vn"}  # Chỉ audio
 
                         source = discord.FFmpegPCMAudio(
-                            str("./audio2.mp3"),
+                            str("./daNhan.mp3")
+                            if threadMeta["sign"] == "+"
+                            else str("./daChuyen.mp3"),
                             **ffmpeg_options,
                         )  # File audio bạn chuẩn bị
 

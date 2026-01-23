@@ -179,13 +179,16 @@ async def periodic_api_check(guild):
                                 print("Đang phát rồi, không queue file thứ hai")
 
                         ffmpeg_options = {"options": "-vn"}  # Chỉ audio
-
-                        source = discord.FFmpegPCMAudio(
-                            str("./daNhan.mp3")
-                            if threadMeta["sign"] == "+"
-                            else str("./daChuyen.mp3"),
-                            **ffmpeg_options,
-                        )  # File audio bạn chuẩn bị
+                        if threadMeta["sign"] == "+":
+                            source = discord.FFmpegPCMAudio(
+                                str("./daNhan.mp3"),
+                                **ffmpeg_options,
+                            )  # File audio bạn chuẩn bị
+                        else:
+                            source = discord.FFmpegPCMAudio(
+                                str("./daChuyen.mp3"),
+                                **ffmpeg_options,
+                            )  # File audio bạn chuẩn bị
 
                         # Nếu muốn dùng TTS từ response text (cần thêm lib như gTTS hoặc ElevenLabs)
                         # from gtts import gTTS

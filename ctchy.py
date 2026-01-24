@@ -85,13 +85,14 @@ async def periodic_api_check(guild):
                 pattern = re.compile(
                     r"""
                     ^\s*
-                    (?P<sign>[+-])\s*                # leading + or -
-                    (?P<amount>[\d,]+(?:\.\d+)?)\s*  # number with optional commas / decimals
-                    \s*(?P<currency>\w+)?            # optional currency (e.g., VND)
+                    (?P<sign>[+-])\s*                       # + hoặc -
+                    (?P<amount>[\d,]+(?:\.\d+)?)\s*         # số tiền, hỗ trợ dấu phẩy + thập phân
+                    \s*(?P<currency>[A-Za-z]{2,10})?\s*     # currency (optional, 2-10 chữ cái)
                     /\s*
-                    (?P<ts>\d{13})\s*$               # 13‑digit Unix ms timestamp
-                """,
-                    re.VERBOSE,
+                    (?P<ts>\d{13})\s*                       # 13 chữ số timestamp
+                    (?:/.*)?\s*$                            # mọi thứ sau dấu / đầu tiên đều chấp nhận (hoặc không có)
+                    """,
+                    re.VERBOSE | re.IGNORECASE,
                 )
                 entries = []
                 for line in channel.threads:

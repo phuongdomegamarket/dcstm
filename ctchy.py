@@ -43,9 +43,22 @@ async def on_ready():
             CHANNELS = guild.channels
             for channel in CHANNELS:
                 if "voice transactions" in channel.name.lower():
-                    current_voice_client = await channel.connect()
-            if not periodic_api_check.is_running():
-                periodic_api_check.start(guild)
+                    stopped = False
+                    while not stopped:
+                        try:
+                            current_voice_client = await channel.connect()
+                            print("Connect thành công!")
+                            stopped = True
+
+                        except asyncio.TimeoutError:
+                            print("Timeout → thử lại ngay...")
+                            await asyncio.sleep(10)  # delay nhỏ để không spam quá nhanh
+
+                        except Exception as e:
+                            print(f"Lỗi nghiêm trọng: {e}")
+                            await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
+    if not periodic_api_check.is_running():
+        periodic_api_check.start(guild)
 
 
 @bot.command(name="join")
@@ -123,10 +136,10 @@ async def periodic_api_check(guild):
         if lastThreads and historyChannel:
             for threadMeta in lastThreads:
                 if (
-                    str(threadMeta["original"]) not in str(historyChannel.threads)
+                    str(threadMeta["original"])
+                    not in list(map(lambda item: item.name, historyChannel.threads))
                     and threadMeta["original"] not in processed_threads
                 ):
-                    processed_threads.add(threadMeta["original"])
                     audioUrl = str(tts.process(f"{threadMeta['amount']} đồng"))
                     print(audioUrl)
                     # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)
@@ -157,12 +170,15 @@ async def periodic_api_check(guild):
                     if historyChannel:
                         if (
                             str(threadMeta["original"])
-                            not in str(historyChannel.threads)
+                            not in list(
+                                map(lambda item: item.name, historyChannel.threads)
+                            )
                             and threadMeta["original"] not in processed_threads
                         ):
                             if (
                                 audioUrl and not current_voice_client.is_playing()
                             ):  # Thay logic của bạn
+                                processed_threads.add(threadMeta["original"])
 
                                 def play_next_audio(error):
                                     if error:

@@ -140,6 +140,7 @@ async def periodic_api_check(guild):
                     not in list(map(lambda item: item.name, historyChannel.threads))
                     and threadMeta["original"] not in processed_threads
                 ):
+                    print(f"{threadMeta['amount']} đồng")
                     audioUrl = str(tts.process(f"{threadMeta['amount']} đồng"))
                     print(audioUrl)
                     # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)

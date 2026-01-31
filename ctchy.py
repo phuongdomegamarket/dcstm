@@ -30,6 +30,14 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
+if "log_queue" not in st.session_state:
+    st.session_state["log_queue"] = queue.Queue()
+
+if "logs" not in st.session_state:
+    st.session_state["logs"] = []
+
+if "task_running" not in st.session_state:
+    st.session_state["task_running"] = False
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Biến global để lưu voice client hiện tại (nếu bot join 1 channel duy nhất)

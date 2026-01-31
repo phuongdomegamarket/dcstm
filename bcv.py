@@ -1,9 +1,17 @@
 import asyncio
 import base64
 import json
+import locale
 import os
+import queue
+import random
+import re
+import subprocess
+import sys
+import threading
 import time
 import uuid
+from datetime import datetime, timedelta
 from io import BytesIO
 
 import aiohttp
@@ -205,45 +213,45 @@ class CaptchaManager:
         # 3. Xây dựng URL tải hình CAPTCHA
         self.captcha_image_url = f"https://digiapp.vietcombank.com.vn/utility-service/v2/captcha/MASS/{self.captcha_guid}"
         # URL ảnh cần OCR (thay bằng link của bạn)
-        url = self.captcha_image_url  # ← thay link thật vào đây
+        # url = self.captcha_image_url  # ← thay link thật vào đây
 
-        response = requests.get(url)
-        if response.status_code != 200:
-            print(f"Lỗi tải ảnh: {response.status_code}")
-            exit()
+        # response = requests.get(url)
+        # if response.status_code != 200:
+        #     print(f"Lỗi tải ảnh: {response.status_code}")
+        #     exit()
 
-        image_bytes = response.content
+        # image_bytes = response.content
 
-        # Chuyển bytes → PIL Image → numpy array (RGB)
-        img_pil = Image.open(BytesIO(image_bytes)).convert("RGB")
-        img_array = np.array(img_pil)  # shape (height, width, 3)
+        # # Chuyển bytes → PIL Image → numpy array (RGB)
+        # img_pil = Image.open(BytesIO(image_bytes)).convert("RGB")
+        # img_array = np.array(img_pil)  # shape (height, width, 3)
 
-        # Khởi tạo EasyOCR Reader (chạy lần đầu sẽ tải model về ~ vài trăm MB)
-        # ['vi', 'en'] để hỗ trợ tiếng Việt + Anh tốt hơn
-        reader = easyocr.Reader(["vi", "en"], gpu=True)  # gpu=False nếu không có GPU
+        # # Khởi tạo EasyOCR Reader (chạy lần đầu sẽ tải model về ~ vài trăm MB)
+        # # ['vi', 'en'] để hỗ trợ tiếng Việt + Anh tốt hơn
+        # reader = easyocr.Reader(["vi", "en"], gpu=True)  # gpu=False nếu không có GPU
 
-        # Chạy OCR
-        # detail=1: trả về bounding box + text + confidence
-        # detail=0: chỉ text
-        results = reader.readtext(img_array, detail=1)
+        # # Chạy OCR
+        # # detail=1: trả về bounding box + text + confidence
+        # # detail=0: chỉ text
+        # results = reader.readtext(img_array, detail=1)
 
-        # In kết quả
-        for detection in results:
-            bbox = detection[0]  # list 4 điểm [[x1,y1], [x2,y2], ...]
-            text = detection[1]  # chữ nhận diện
-            confidence = detection[2]  # độ tin cậy (0-1)
-            print(f"Text: {text:<40} | Confidence: {confidence:.2%}")
+        # # In kết quả
+        # for detection in results:
+        #     bbox = detection[0]  # list 4 điểm [[x1,y1], [x2,y2], ...]
+        #     text = detection[1]  # chữ nhận diện
+        #     confidence = detection[2]  # độ tin cậy (0-1)
+        #     print(f"Text: {text:<40} | Confidence: {confidence:.2%}")
         print("New CAPTCHA:")
         print(f"- GUID: {self.captcha_guid}")
         print(f"- Image URL: {self.captcha_image_url}")
         print(f"- Expire time: {self.expire_time_captcha}")
 
-        return self.captcha_guid
+        return {"guid": self.captcha_guid, "url": self.captcha_image_url}
 
 
 # Sử dụng
 manager = CaptchaManager()
-guid = manager.get_captcha()
+# guid = manager.get_captcha()
 
 private_key_base64 = results["private_key_base64"]
 public_key_base64 = results["public_key_base64"]
@@ -252,14 +260,19 @@ public_key_base64 = results["public_key_base64"]
 async def login(
     username,
     password,
-    GUID,
-    captcha_value,
+    GUID=None,
+    captcha_value=None,
     headers=None,
     browser_id=None,
     public_key_base64=None,
     private_key_pem=None,
     save_browser=False,
 ):
+    if not GUID or not captcha_value:
+        result = manager.get_captcha()
+        GUID = result["guid"]
+        captcha_url = result["url"]
+        captcha_value = await getTextFromImage(captcha_url)
     if not public_key_base64 or not private_key_pem:
         public_key_base64 = DEFAULTS["public_key_base64"]
         private_key_pem = DEFAULTS["private_key_pem"]
@@ -293,8 +306,10 @@ async def login(
                 json=payload,
             ) as response:
                 try:
-                    jsonData = json.loads(await response.text())
-                    if "sessionId" in jsonData:
+                    jsonData = decrypt_response(
+                        json.loads(await response.text()), private_key_pem
+                    )
+                    if jsonData and "sessionId" in jsonData:
                         print("Login successful")
                         return jsonData
                     print("Login failed")
@@ -303,4 +318,61 @@ async def login(
                 return None
 
 
-asyncio.run(login("0386757425", "1!2@3#_Qwe", guid, "12123"))
+async def getTextFromImage(url):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            try:
+                image_bytes = await response.read()
+                base64_str = base64.b64encode(image_bytes).decode("ascii")
+                mime_type = response.headers.get("Content-Type", "image/jpeg")
+                data_uri = f"data:{mime_type};base64,{base64_str}"
+                url = "https://www.jpgtotext.com/"
+                response = await session.get(url)
+                responseText = await response.text()
+                csrf_token = re.search(
+                    r'"X-CSRF-TOKEN"\s*:\s*"([^"]+)"', responseText
+                ).group(1)
+                set_cookie_list = response.headers.getall("Set-Cookie", [])
+                cookie = ""
+                if set_cookie_list:
+                    for cookie_str in set_cookie_list:
+                        cookie += f"{cookie_str};"
+                url = f"https://www.jpgtotext.com/emd/captcha-verify/{datetime.now().timestamp()}"
+                payload = {
+                    "emd_captcha_1": "1Ux6aoGeookM8oIstJ5RAy4WV6MMvRSEh1lDKsLfIn",
+                    "emd_captcha_2": None,
+                    "emd_captcha_3": datetime.now().timestamp(),
+                    "emd_is_tool_premium": 0,
+                }
+                headers = {
+                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                    "X-CSRF-TOKEN": csrf_token,
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Cookie": cookie,
+                }
+                response = await session.post(url, headers=headers, data=payload)
+                jsonData = await response.json()
+                url = "https://www.jpgtotext.com/free-image-to-text"
+                payload = {
+                    "req_key": jsonData["req_key"],
+                    "base64": data_uri,
+                    "imgName": datetime.now(),
+                    "dimension": None,
+                    "fileSize": None,
+                    "count": 0,
+                    "e_track_key": "17697332588988h35wuqoba",
+                    "parent_id": "1",
+                    "tool_key": "jpg_to_text",
+                }
+                response = await session.post(url, headers=headers, data=payload)
+                print(await response.json())
+                captcha_value = "".join(
+                    re.findall(r"\d+", (await response.json())["text"])
+                )
+                return captcha_value
+            except Exception as e:
+                print(f"Error: {e}")
+                return None
+
+
+asyncio.run(login("0386757425", "1!2@3#_Qwe"))

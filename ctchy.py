@@ -279,6 +279,26 @@ def initialize_heavy_stuff():
         print(
             "Heavy initialization running..."
         )  # bạn sẽ thấy log này chỉ 1 lần trong console/cloud log
+        return {
+            "model": "loaded_successfully",
+            "timestamp": time.time(),
+            "db_status": "connected",
+        }
+
+
+# Trong phần chính của app
+st.title("my style")
+
+# Dòng này đảm bảo: chạy 1 lần duy nhất, mọi user đều dùng chung kết quả
+result = initialize_heavy_stuff()
+
+st.success("The system is ready!")
+st.write("Result:")
+st.json(result)
+stopped = False
+while not stopped:
+    try:
+        stopped = True
         with st.status("Processing...", expanded=True) as status:
             placeholder = st.empty()
             logs = []
@@ -301,19 +321,6 @@ def initialize_heavy_stuff():
                     time.sleep(0.3)
 
             status.update(label="Hoàn thành!", state="complete", expanded=False)
-        return {
-            "model": "loaded_successfully",
-            "timestamp": time.time(),
-            "db_status": "connected",
-        }
 
-
-# Trong phần chính của app
-st.title("my style")
-
-# Dòng này đảm bảo: chạy 1 lần duy nhất, mọi user đều dùng chung kết quả
-result = initialize_heavy_stuff()
-
-st.success("The system is ready!")
-st.write("Result:")
-st.json(result)
+    except Exception as e:
+        st.session_state.log_queue.put(("error", f"Error occurred: {str(e)}"))

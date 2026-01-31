@@ -10,7 +10,10 @@ TTS_KEYS = json.loads(str(os.getenv("TTS_KEY")))
 TTS_SERVER = os.getenv("TTS_SERVER")
 
 
-def process(content: str):
+def process(content: str, extra_tts_keys=None):
+    ttsKeys = TTS_KEYS
+    if extra_tts_keys:
+        ttsKeys.extend(extra_tts_keys)
     if TTS_SERVER:
         for ttsKey in TTS_KEYS:
             url = TTS_SERVER

@@ -81,7 +81,7 @@ def myStyle(log_queue):
                                 await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
                     elif "fpt-voice" in channel.name.lower():
                         ttsKeysChannel = channel
-                        async for msg in message.channel.history():
+                        async for msg in channel.history():
                             tts_keys.add(msg.content)
         if not periodic_api_check.is_running():
             periodic_api_check.start(guild)

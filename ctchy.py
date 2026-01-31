@@ -47,13 +47,15 @@ HISTORY_CHANNEL = os.getenv("HISTORY_CHANNEL")
 GUILD = None
 WATCH_ON_CHANNEL = os.getenv("WATCH_ON_CHANNEL")
 
+tts_keys = set()
+ttsKeysChannel = None
 processed_threads = set()
 
 
 def myStyle(log_queue):
     @bot.event
     async def on_ready():
-        global CHANNELS, GUILD, current_voice_client
+        global CHANNELS, GUILD, current_voice_client, ttsKeysChannel, tts_keys
         print(f"Bot ready: {bot.user}")
         for guild in bot.guilds:
             if guild.name.lower() == "phượng đỏ mega":
@@ -77,8 +79,18 @@ def myStyle(log_queue):
                             except Exception as e:
                                 print(f"Lỗi nghiêm trọng: {e}")
                                 await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
+                    elif "fpt-voice" in channel.name.lower():
+                        ttsKeysChannel = channel
+                        async for msg in message.channel.history():
+                            tts_keys.add(msg.content)
         if not periodic_api_check.is_running():
             periodic_api_check.start(guild)
+
+    @bot.event
+    async def on_message(message):
+        global tts_keys
+        if ttsKeysChannel and message.channel.id == ttsKeysChannel.id:
+            tts_keys.add(message.content)
 
     @bot.command(name="join")
     async def join(ctx):
@@ -158,7 +170,9 @@ def myStyle(log_queue):
                         and threadMeta["original"] not in processed_threads
                     ):
                         processed_threads.add(threadMeta["original"])
-                        audioUrl = str(tts.process(f"{threadMeta['amount']} đồng"))
+                        audioUrl = str(
+                            tts.process(f"{threadMeta['amount']} đồng", tts_keys)
+                        )
                         # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)
                         max_attempts = 12  # Max chờ ~60 giây (5s * 12)
                         async with aiohttp.ClientSession() as session:

@@ -13,6 +13,7 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
+from webbrowser import get
 
 import aiohttp
 import easyocr
@@ -24,6 +25,16 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.asymmetric.ec import generate_private_key
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from PIL import Image
+
+BASE_URL = "https://digiapp.vietcombank.com.vn/bank-service"
+DEFAULT_PAYLOAD = {
+    "DT": "Windows",
+    "E": None,
+    "OV": "10",
+    "PM": "Firefox 147.0",
+    "appVersion": "",
+    "lang": "en",
+}
 
 
 def generate_key():
@@ -268,6 +279,7 @@ async def login(
     private_key_pem=None,
     save_browser=False,
 ):
+    global DEFAULT_PAYLOAD
     if not GUID or not captcha_value:
         result = manager.get_captcha()
         GUID = result["guid"]
@@ -310,6 +322,17 @@ async def login(
                         json.loads(await response.text()), private_key_pem
                     )
                     if jsonData and "sessionId" in jsonData:
+                        jsonData = json.loads(jsonData)
+                        DEFAULT_PAYLOAD = {
+                            **DEFAULT_PAYLOAD,
+                            "sessionId": jsonData["sessionId"],
+                            "browserId": browser_id,
+                            "mobileId": jsonData["userInfo"]["mobileId"],
+                            "accountType": jsonData["userInfo"]["defaultAccountType"],
+                            "user": username,
+                            "clientId": jsonData["userInfo"]["clientId"],
+                            "cif": jsonData["userInfo"]["cif"],
+                        }
                         print("Login successful")
                         return jsonData
                     print("Login failed")
@@ -375,4 +398,86 @@ async def getTextFromImage(url):
                 return None
 
 
-asyncio.run(login("0386757425", "1!2@3#_Qwe"))
+async def getAccountList(public_key_base64=None, private_key_pem=None):
+    if not public_key_base64 or not private_key_pem:
+        public_key_base64 = DEFAULTS["public_key_base64"]
+        private_key_pem = DEFAULTS["private_key_pem"]
+    payload = encrypt_request(
+        {**DEFAULT_PAYLOAD, "accountType": "ALL", "lang": "en", "mid": 8},
+        public_key_base64,
+        DEFAULTS["server_public_key_base64"],
+    )
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{BASE_URL}/v2/get-list-account-via-cif",
+            headers=DEFAULTS["headers"],
+            json=payload,
+        ) as response:
+            if response.status < 400:
+                jsonData = decrypt_response(await response.json(), private_key_pem)
+                if jsonData:
+                    jsonData = json.loads(jsonData)
+                    return jsonData["cards"]
+
+        return None
+
+
+async def transactionHistory(
+    account_no,
+    from_date=(datetime.now() - timedelta(days=7)).strftime("%d/%m/%Y"),
+    to_date=datetime.now().strftime("%d/%m/%Y"),
+    length_in_page=10,
+    page_index=0,
+    public_key_base64=None,
+    private_key_pem=None,
+):
+    if not public_key_base64 or not private_key_pem:
+        public_key_base64 = DEFAULTS["public_key_base64"]
+        private_key_pem = DEFAULTS["private_key_pem"]
+    payload = encrypt_request(
+        {
+            **DEFAULT_PAYLOAD,
+            "accountNo": account_no,
+            "fromDate": from_date,
+            "lengthInPage": length_in_page,
+            "mid": 14,
+            "pageIndex": page_index,
+            "toDate": to_date,
+        },
+        public_key_base64,
+        DEFAULTS["server_public_key_base64"],
+    )
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{BASE_URL}/v1/transaction-history",
+            headers=DEFAULTS["headers"],
+            json=payload,
+        ) as response:
+            if response.status < 400:
+                jsonData = decrypt_response(await response.json(), private_key_pem)
+                if jsonData and "transactions" in str(jsonData):
+                    jsonData = json.loads(jsonData)
+                    return jsonData["transactions"]
+        return None
+
+
+async def test():
+    response = await login("0386757425", "1!2@3#_Qwe")
+    if response:
+        cards = await getAccountList()
+        if cards:
+            for card in cards:
+                transactions = await transactionHistory(card["cardAccount"])
+                if transactions:
+                    print(transactions)
+                    for trans in transactions:
+                        print(
+                            trans["tranDate"],
+                            trans["CD"],
+                            trans["Amount"],
+                            trans["curCode"],
+                            trans["Description"],
+                        )
+
+
+asyncio.run(test())

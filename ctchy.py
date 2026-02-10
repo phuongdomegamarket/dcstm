@@ -139,6 +139,7 @@ def myStyle(log_queue):
                         )
                         entries = []
                         for line in channel.threads:
+                            print(line)
                             m = pattern.match(line.name)
                             if not m:
                                 continue  # skip malformed lines
@@ -162,7 +163,6 @@ def myStyle(log_queue):
                         historyChannel = channel
                 if historyChannel:
                     historyChannel = await guild.fetch_channel(historyChannel.id)
-                    print(historyChannel)
                 if lastThreads and historyChannel:
                     for threadMeta in lastThreads:
                         if (

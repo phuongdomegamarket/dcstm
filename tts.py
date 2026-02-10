@@ -21,7 +21,7 @@ def process(content: str, extra_tts_keys=None):
             payload = content
             headers = {
                 "api-key": ttsKey,
-                "speed": "",
+                "speed": "-0.5",
                 "voice": "banmai",
             }
 

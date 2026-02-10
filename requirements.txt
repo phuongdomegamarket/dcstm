@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+discord
+requests
+aiohttp
+asyncio
+pynacl
+requests
+cryptography
+paddleocr
+easyocr

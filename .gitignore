@@ -1,7 +1,0 @@
-.env
-node_modules/
-
-test.*
-.devcontainer
-.github
-__pycache__

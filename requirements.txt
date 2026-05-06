@@ -11,4 +11,3 @@ paddleocr
 easyocr
 PyNaCl
 davey
-vietnormalizer

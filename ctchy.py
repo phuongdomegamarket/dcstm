@@ -12,7 +12,6 @@ import time
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
-from vietnormalizer import VietnameseNormalizer
 
 # Load environment variables from the .env file
 load_dotenv()

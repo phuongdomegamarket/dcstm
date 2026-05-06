@@ -173,6 +173,8 @@ def myStyle(log_queue):
                             and threadMeta["original"] not in processed_threads
                         ):
                             processed_threads.add(threadMeta["original"])
+                            # normalizer = VietnameseNormalizer()
+                            # print(normalizer.normalize(threadMeta["amount"]))
                             audioUrl = str(
                                 tts.process(f"{threadMeta['amount']} đồng", tts_keys)
                             )
@@ -224,9 +226,10 @@ def myStyle(log_queue):
                                             )
                                             current_voice_client.play(
                                                 source2,
-                                                after=lambda e,
-                                                meta1=meta: bot.loop.create_task(
-                                                    onComplete(e, meta1)
+                                                after=lambda e, meta1=meta: (
+                                                    bot.loop.create_task(
+                                                        onComplete(e, meta1)
+                                                    )
                                                 ),  # callback khi file 2 xong
                                             )
                                             print("Đang phát file thứ hai (TTS URL)")
@@ -264,8 +267,9 @@ def myStyle(log_queue):
                                 if not current_voice_client.is_playing():
                                     current_voice_client.play(
                                         source,
-                                        after=lambda e,
-                                        meta=threadMeta: play_next_audio(e, meta),
+                                        after=lambda e, meta=threadMeta: (
+                                            play_next_audio(e, meta)
+                                        ),
                                     )
                                     print("Đang play voice từ API response!")
                                 else:

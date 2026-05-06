@@ -178,7 +178,7 @@ def myStyle(log_queue):
                             # print(normalizer.normalize(threadMeta["amount"]))
                             audioUrl = str(
                                 tts.process(
-                                    f"{normalizer.normalize(threadMeta['amount'])} đồng",
+                                    f"{normalizer.normalize(threadMeta['amount'])}đ",
                                     tts_keys,
                                 )
                             )

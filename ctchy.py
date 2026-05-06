@@ -174,13 +174,10 @@ def myStyle(log_queue):
                             and threadMeta["original"] not in processed_threads
                         ):
                             processed_threads.add(threadMeta["original"])
-                            normalizer = VietnameseNormalizer()
+                            # normalizer = VietnameseNormalizer()
                             # print(normalizer.normalize(threadMeta["amount"]))
                             audioUrl = str(
-                                tts.process(
-                                    f"{normalizer.normalize(threadMeta['amount'])}đ",
-                                    tts_keys,
-                                )
+                                tts.process(f"{threadMeta['amount']} đồng", tts_keys)
                             )
                             # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)
                             max_attempts = 12  # Max chờ ~60 giây (5s * 12)

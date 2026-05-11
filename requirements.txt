@@ -13,3 +13,4 @@ davey
 streamlit==1.42.0
 uvicorn==0.34.0
 websockets==13.1
+load_dotenv

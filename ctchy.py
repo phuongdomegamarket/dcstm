@@ -142,7 +142,7 @@ def myStyle(log_queue):
                         ttsKeysChannel = channel
                         async for msg in channel.history():
                             tts_keys.add(msg.content)
-                return  # Bỏ qua nếu chưa join voice
+                #return  # Bỏ qua nếu chưa join voice
             if CHANNELS:
                 lastThreads = None
                 historyChannel = None

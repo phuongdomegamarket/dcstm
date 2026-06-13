@@ -138,6 +138,7 @@ def myStyle(log_queue):
                             except Exception as e:
                                 print(f"Lỗi nghiêm trọng: {e}")
                                 await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
+                                stopped=True
                     elif "fpt-voice" in channel.name.lower():
                         ttsKeysChannel = channel
                         async for msg in channel.history():

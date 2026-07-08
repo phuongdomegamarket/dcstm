@@ -145,12 +145,12 @@ def myStyle(log_queue):
                             except Exception as e:
                                 print(f"Lỗi nghiêm trọng: {e}")
                                 await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
-                                stopped=True
+                                stopped = True
                     elif "fpt-voice" in channel.name.lower():
                         ttsKeysChannel = channel
                         async for msg in channel.history():
                             tts_keys.add(msg.content)
-                #return  # Bỏ qua nếu chưa join voice
+                # return  # Bỏ qua nếu chưa join voice
             if CHANNELS:
                 lastThreads = None
                 historyChannel = None
@@ -307,7 +307,7 @@ def myStyle(log_queue):
 
                                 if not current_voice_client.is_playing():
                                     current_voice_client.play(source)
-                                    test = False
+                                    os.remove(fileId)
                                     print("Đang play voice từ API response!")
                                 else:
                                     print("Đang play rồi → skip")

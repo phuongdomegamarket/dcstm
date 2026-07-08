@@ -215,7 +215,7 @@ def myStyle(log_queue):
                             #     communicate.save(OUTPUT_FILE), timeout=1
                             # )
                             fileId = f"{datetime.now().timestamp()}.mp3"
-                            print(tts.process(TEXT, fileId))
+                            print(await tts.process(TEXT, fileId))
                             # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)
                             max_attempts = 12  # Max chờ ~60 giây (5s * 12)
                             # async with aiohttp.ClientSession() as session:
@@ -246,7 +246,7 @@ def myStyle(log_queue):
                             #                 return
                             # # Logic xử lý response → quyết định có play voice không
                             # # Ví dụ: Nếu response có key "alert" hoặc "new_message"
-                            print(2222222222222)
+
                             if (
                                 not current_voice_client.is_playing()
                             ):  # Thay logic của bạn
@@ -274,7 +274,6 @@ def myStyle(log_queue):
                                 #             print(f"Lỗi phát file thứ hai: {ex}")
                                 #     else:
                                 #         print("Đang phát rồi, không queue file thứ hai")
-                                print(333333333333)
                                 ffmpeg_options = {"options": "-vn"}  # Chỉ audio
                                 # if threadMeta["sign"] == "+":
                                 #     source = discord.FFmpegPCMAudio(

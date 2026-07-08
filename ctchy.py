@@ -287,7 +287,7 @@ def myStyle(log_queue):
                                 #         **ffmpeg_options,
                                 #     )  # File audio bạn chuẩn bị
                                 source = discord.FFmpegPCMAudio(
-                                    str(fileId),
+                                    f"./{fileId}",
                                     **ffmpeg_options,
                                 )  # File audio bạn chuẩn bị
 
@@ -307,7 +307,7 @@ def myStyle(log_queue):
 
                                 if not current_voice_client.is_playing():
                                     current_voice_client.play(source)
-                                    os.remove(fileId)
+                                    os.remove(f"./{fileId}")
                                     print("Đang play voice từ API response!")
                                 else:
                                     print("Đang play rồi → skip")

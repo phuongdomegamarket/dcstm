@@ -122,11 +122,35 @@ def myStyle(log_queue):
 
     @tasks.loop(seconds=1)  # Chỉnh thời gian ở đây (seconds, minutes, hours)
     async def periodic_api_check(guild):
+        global CHANNELS
         try:
             global current_voice_client, CHANNELS, processed_threads, test
             if current_voice_client is None or not current_voice_client.is_connected():
                 print("Bot chưa join voice channel → skip play voice")
-                return  # Bỏ qua nếu chưa join voice
+                for channel in CHANNELS:
+                    if "voice transactions" in channel.name.lower():
+                        stopped = False
+                        while not stopped:
+                            try:
+                                current_voice_client = await channel.connect()
+                                print("Connect thành công!")
+                                stopped = True
+
+                            except asyncio.TimeoutError:
+                                print("Timeout → thử lại ngay...")
+                                await asyncio.sleep(
+                                    10
+                                )  # delay nhỏ để không spam quá nhanh
+
+                            except Exception as e:
+                                print(f"Lỗi nghiêm trọng: {e}")
+                                await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
+                                stopped=True
+                    elif "fpt-voice" in channel.name.lower():
+                        ttsKeysChannel = channel
+                        async for msg in channel.history():
+                            tts_keys.add(msg.content)
+                #return  # Bỏ qua nếu chưa join voice
             if CHANNELS:
                 lastThreads = None
                 historyChannel = None

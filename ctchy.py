@@ -7,6 +7,7 @@ import random
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime, timedelta
@@ -215,7 +216,8 @@ def myStyle(log_queue):
                             #     communicate.save(OUTPUT_FILE), timeout=1
                             # )
                             fileId = f"{datetime.now().timestamp()}.mp3"
-                            print(await tts.process(TEXT, fileId))
+                            OUTPUT_FILE = os.path.join(tempfile.gettempdir(), fileId)
+                            print(tts.process(TEXT, OUTPUT_FILE))
                             # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)
                             max_attempts = 12  # Max chờ ~60 giây (5s * 12)
                             # async with aiohttp.ClientSession() as session:
@@ -306,7 +308,7 @@ def myStyle(log_queue):
 
                                 if not current_voice_client.is_playing():
                                     current_voice_client.play(source)
-                                    os.remove(f"./{fileId}")
+                                    os.remove(f"./{OUTPUT_FILE}")
                                     print("Đang play voice từ API response!")
                                 else:
                                     print("Đang play rồi → skip")

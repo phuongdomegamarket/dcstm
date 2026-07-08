@@ -21,10 +21,10 @@ normalizer = VietnameseNormalizer()
 # tts.save("output.mp3")
 
 
-async def process(content, fileName):
-    # tts = gTTS(content, lang="vi")
-    # tts.save(fileName)
-    TEXT = normalizer.normalize(content)
-    VOICE = "vi-VN-HoaiMyNeural"
-    communicate = edge_tts.Communicate(TEXT, VOICE)
-    return await communicate.save(fileName)
+def process(content, fileName):
+    tts = gTTS(content, lang="vi")
+    tts.save("output.mp3")
+    # TEXT = normalizer.normalize(content)
+    # VOICE = "vi-VN-HoaiMyNeural"
+    # communicate = edge_tts.Communicate(TEXT, VOICE)
+    # return await communicate.save(fileName)

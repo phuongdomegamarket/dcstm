@@ -5,3 +5,4 @@ test.*
 .devcontainer
 .github
 __pycache__
+*_bu.py

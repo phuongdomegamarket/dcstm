@@ -247,6 +247,7 @@ def myStyle(log_queue):
                                     )
                                     if not current_voice_client.is_playing():
                                         current_voice_client.play(source)
+                                        await asyncio.sleep(1)
                                         print("Đang play voice từ API response!")
                                         await historyChannel.create_thread(
                                             name=threadMeta["original"], content="done"

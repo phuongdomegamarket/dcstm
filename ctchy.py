@@ -217,7 +217,9 @@ def myStyle(log_queue):
                             # )
                             fileId = f"{datetime.now().timestamp()}.mp3"
                             OUTPUT_FILE = os.path.join(tempfile.gettempdir(), fileId)
-                            print(tts.process(TEXT, OUTPUT_FILE))
+                            print(222222)
+                            await tts.process(TEXT, OUTPUT_FILE)
+                            print(33333)
                             # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)
                             max_attempts = 12  # Max chờ ~60 giây (5s * 12)
                             # async with aiohttp.ClientSession() as session:

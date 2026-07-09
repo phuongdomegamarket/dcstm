@@ -305,15 +305,18 @@ def myStyle(log_queue):
                                         if e:
                                             print(f"Voice play error: {e}")
                                         else:
-                                            print("Voice played OK")
+
                                             await historyChannel.create_thread(
                                                 name=meta["original"], content="done"
                                             )
 
                                     if not current_voice_client.is_playing():
                                         current_voice_client.play(source)
-                                        processing=False
                                         print("Đang play voice từ API response!")
+                                        await historyChannel.create_thread(
+                                            name=threadMeta["original"], content="done"
+                                        )
+                                        print("Voice played OK")
                                     else:
                                         print("Đang play rồi → skip")
         except Exception as e:

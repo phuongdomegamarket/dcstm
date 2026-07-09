@@ -26,5 +26,5 @@ async def process(content, fileName):
     # tts.save("output.mp3")
     TEXT = normalizer.normalize(content)
     VOICE = "vi-VN-HoaiMyNeural"
-    communicate = edge_tts.Communicate(TEXT, VOICE,rate='-20%',pitch="-50hz")
+    communicate = edge_tts.Communicate(TEXT, VOICE,rate='-20%')
     return await communicate.save(fileName)

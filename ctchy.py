@@ -56,7 +56,7 @@ tts_keys = set()
 ttsKeysChannel = None
 processed_threads = set()
 
-test = False
+processing = False
 
 
 def myStyle(log_queue):
@@ -125,7 +125,7 @@ def myStyle(log_queue):
     async def periodic_api_check(guild):
         global CHANNELS
         try:
-            global current_voice_client, CHANNELS, processed_threads, test
+            global current_voice_client, CHANNELS, processed_threads, processing
             if current_voice_client is None or not current_voice_client.is_connected():
                 print("Bot chưa join voice channel → skip play voice")
                 for channel in CHANNELS:
@@ -202,8 +202,9 @@ def myStyle(log_queue):
                             not in list(
                                 map(lambda item: item.name, historyChannel.threads)
                             )
-                            and threadMeta["original"] not in processed_threads
+                            and threadMeta["original"] not in processed_threads and not processing
                         ):
+                            processing=True
                             processed_threads.add(threadMeta["original"])
                             # normalizer = VietnameseNormalizer()
                             # print(normalizer.normalize(threadMeta["amount"]))
@@ -215,7 +216,7 @@ def myStyle(log_queue):
                             # await asyncio.wait_for(
                             #     communicate.save(OUTPUT_FILE), timeout=1
                             # )
-                            fileId = f"{datetime.now().timestamp()}.mp3"
+                            fileId = 'output.mp3'#f"{datetime.now().timestamp()}.mp3"
 
                             await tts.process(TEXT, fileId)
 
@@ -309,7 +310,7 @@ def myStyle(log_queue):
 
                                 if not current_voice_client.is_playing():
                                     current_voice_client.play(source)
-                                    os.remove(fileId)
+                                    processing=False
                                     print("Đang play voice từ API response!")
                                 else:
                                     print("Đang play rồi → skip")

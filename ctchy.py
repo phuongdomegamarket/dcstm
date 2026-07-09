@@ -7,6 +7,7 @@ import random
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime, timedelta
@@ -55,7 +56,7 @@ tts_keys = set()
 ttsKeysChannel = None
 processed_threads = set()
 
-test = False
+processing_lock = asyncio.Lock()
 
 
 def myStyle(log_queue):
@@ -124,7 +125,7 @@ def myStyle(log_queue):
     async def periodic_api_check(guild):
         global CHANNELS
         try:
-            global current_voice_client, CHANNELS, processed_threads, test
+            global current_voice_client, CHANNELS, processed_threads, processing
             if current_voice_client is None or not current_voice_client.is_connected():
                 print("Bot chưa join voice channel → skip play voice")
                 for channel in CHANNELS:
@@ -145,12 +146,12 @@ def myStyle(log_queue):
                             except Exception as e:
                                 print(f"Lỗi nghiêm trọng: {e}")
                                 await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
-                                stopped=True
+                                stopped = True
                     elif "fpt-voice" in channel.name.lower():
                         ttsKeysChannel = channel
                         async for msg in channel.history():
                             tts_keys.add(msg.content)
-                #return  # Bỏ qua nếu chưa join voice
+                # return  # Bỏ qua nếu chưa join voice
             if CHANNELS:
                 lastThreads = None
                 historyChannel = None
@@ -203,114 +204,56 @@ def myStyle(log_queue):
                             )
                             and threadMeta["original"] not in processed_threads
                         ):
-                            processed_threads.add(threadMeta["original"])
-                            # normalizer = VietnameseNormalizer()
-                            # print(normalizer.normalize(threadMeta["amount"]))
-                            TEXT = normalizer.normalize(
-                                f"đã {'nhận' if threadMeta['sign'] == '+' else 'chuyển'} {threadMeta['amount']} đồng"
-                            )
+                            if processing_lock.locked():
+                                continue
+                            async with processing_lock:
+                                processed_threads.add(threadMeta["original"])
+                                TEXT = normalizer.normalize(
+                                    f"đã {'nhận' if threadMeta['sign'] == '+' else 'chuyển'} {threadMeta['amount']} đồng"
+                                )
+                                fileId = 'output.mp3'#f"{datetime.now().timestamp()}.mp3"
+                                await tts.process(TEXT, fileId)
+                                if (
+                                    not current_voice_client.is_playing()
+                                ):  # Thay logic của bạn
+                                    # def play_next_audio(error, meta):
+                                    #     if error:
+                                    #         print(f"File đầu tiên lỗi: {error}")
 
-                            # print(33333333333333333333333344444)
-                            # await asyncio.wait_for(
-                            #     communicate.save(OUTPUT_FILE), timeout=1
-                            # )
-                            fileId = f"{datetime.now().timestamp()}.mp3"
-                            print(tts.process(TEXT, fileId))
-                            # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)
-                            max_attempts = 12  # Max chờ ~60 giây (5s * 12)
-                            # async with aiohttp.ClientSession() as session:
-                            #     async with session.get(
-                            #         audioUrl, timeout=10
-                            #     ) as head_resp:
-                            #         if head_resp.status < 400:
-                            #             print(f"TTS ready")
-                            #         else:
-                            #             for attempt in range(max_attempts):
-                            #                 async with session.get(
-                            #                     audioUrl, timeout=10
-                            #                 ) as head_resp:
-                            #                     if head_resp.status == 200:
-                            #                         print(
-                            #                             f"TTS ready sau {attempt * 1} giây!"
-                            #                         )
-                            #                         break
-                            #                     else:
-                            #                         print(
-                            #                             f"URL chưa sẵn sàng (status {head_resp.status}), chờ 5s..."
-                            #                         )
-                            #                         await asyncio.sleep(1)
-                            #             else:
-                            #                 print(
-                            #                     "Timeout: TTS URL không sẵn sàng sau 60s"
-                            #                 )
-                            #                 return
-                            # # Logic xử lý response → quyết định có play voice không
-                            # # Ví dụ: Nếu response có key "alert" hoặc "new_message"
-                            print(2222222222222)
-                            if (
-                                not current_voice_client.is_playing()
-                            ):  # Thay logic của bạn
-                                # def play_next_audio(error, meta):
-                                #     if error:
-                                #         print(f"File đầu tiên lỗi: {error}")
-
-                                #     # Phát file thứ hai (URL TTS)
-                                #     if not current_voice_client.is_playing():
-                                #         try:
-                                #             source2 = discord.FFmpegPCMAudio(
-                                #                 str(audioUrl),  # URL TTS
-                                #                 **ffmpeg_options,
-                                #             )
-                                #             current_voice_client.play(
-                                #                 source2,
-                                #                 after=lambda e, meta1=meta: (
-                                #                     bot.loop.create_task(
-                                #                         onComplete(e, meta1)
-                                #                     )
-                                #                 ),  # callback khi file 2 xong
-                                #             )
-                                #             print("Đang phát file thứ hai (TTS URL)")
-                                #         except Exception as ex:
-                                #             print(f"Lỗi phát file thứ hai: {ex}")
-                                #     else:
-                                #         print("Đang phát rồi, không queue file thứ hai")
-                                print(333333333333)
-                                ffmpeg_options = {"options": "-vn"}  # Chỉ audio
-                                # if threadMeta["sign"] == "+":
-                                #     source = discord.FFmpegPCMAudio(
-                                #         str("./daNhan.mp3"),
-                                #         **ffmpeg_options,
-                                #     )  # File audio bạn chuẩn bị
-                                # else:
-                                #     source = discord.FFmpegPCMAudio(
-                                #         str("./daChuyen.mp3"),
-                                #         **ffmpeg_options,
-                                #     )  # File audio bạn chuẩn bị
-                                source = discord.FFmpegPCMAudio(
-                                    str(fileId),
-                                    **ffmpeg_options,
-                                )  # File audio bạn chuẩn bị
-
-                                # Nếu muốn dùng TTS từ response text (cần thêm lib như gTTS hoặc ElevenLabs)
-                                # from gtts import gTTS
-                                # tts = gTTS(alert_text, lang='vi')
-                                # tts.save("temp.mp3")
-                                # source = discord.FFmpegPCMAudio("temp.mp3", **ffmpeg_options)
-                                async def onComplete(e, meta):
-                                    if e:
-                                        print(f"Voice play error: {e}")
-                                    else:
-                                        print("Voice played OK")
+                                    #     # Phát file thứ hai (URL TTS)
+                                    #     if not current_voice_client.is_playing():
+                                    #         try:
+                                    #             source2 = discord.FFmpegPCMAudio(
+                                    #                 str(audioUrl),  # URL TTS
+                                    #                 **ffmpeg_options,
+                                    #             )
+                                    #             current_voice_client.play(
+                                    #                 source2,
+                                    #                 after=lambda e, meta1=meta: (
+                                    #                     bot.loop.create_task(
+                                    #                         onComplete(e, meta1)
+                                    #                     )
+                                    #                 ),  # callback khi file 2 xong
+                                    #             )
+                                    #             print("Đang phát file thứ hai (TTS URL)")
+                                    #         except Exception as ex:
+                                    #             print(f"Lỗi phát file thứ hai: {ex}")
+                                    #     else:
+                                    #         print("Đang phát rồi, không queue file thứ hai")
+                                    ffmpeg_options = {"options": "-vn"}  # Chỉ audio
+                                    source = discord.FFmpegPCMAudio(
+                                        f"{fileId}",
+                                        **ffmpeg_options,
+                                    )
+                                    if not current_voice_client.is_playing():
+                                        current_voice_client.play(source)
+                                        print("Đang play voice từ API response!")
                                         await historyChannel.create_thread(
-                                            name=meta["original"], content="done"
+                                            name=threadMeta["original"], content="done"
                                         )
-
-                                if not current_voice_client.is_playing():
-                                    current_voice_client.play(source)
-                                    test = False
-                                    print("Đang play voice từ API response!")
-                                else:
-                                    print("Đang play rồi → skip")
+                                        print("Voice played OK")
+                                    else:
+                                        print("Đang play rồi → skip")
         except Exception as e:
             print(e)
             pass

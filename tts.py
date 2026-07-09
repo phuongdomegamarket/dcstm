@@ -1,35 +1,30 @@
-import json
-import os
+#!/usr/bin/env python3
 
-import requests
-from dotenv import load_dotenv
+"""Simple example to generate audio with preset voice using async/await"""
 
-# Load environment variables from the .env file
-load_dotenv()
-TTS_KEYS = json.loads(str(os.getenv("TTS_KEY")))
-TTS_SERVER = os.getenv("TTS_SERVER")
+import asyncio
+
+import edge_tts
+from gtts import gTTS
+from vietnormalizer import VietnameseNormalizer
+
+normalizer = VietnameseNormalizer()
 
 
-def process(content: str, extra_tts_keys=None):
-    ttsKeys = TTS_KEYS
-    if extra_tts_keys:
-        ttsKeys.extend(extra_tts_keys)
-    if TTS_SERVER:
-        for ttsKey in TTS_KEYS:
-            url = TTS_SERVER
+# from gtts import gTTS
+# from vietnormalizer import VietnameseNormalizer
 
-            payload = content
-            headers = {
-                "api-key": ttsKey,
-                "speed": "",
-                "voice": "banmai",
-            }
+# normalizer = VietnameseNormalizer()
+# TEXT = normalizer.normalize("bạn vừa nhận 40039993 đồng")
 
-            response = requests.request(
-                "POST", url, data=payload.encode("utf-8"), headers=headers
-            )
-            if response:
-                jsData = response.json()
-                if jsData["error"] == 0:
-                    return (response.json())["async"]
-    return None
+# tts = gTTS(TEXT, lang="vi")
+# tts.save("output.mp3")
+
+
+async def process(content, fileName):
+    # tts = gTTS(content, lang="vi")
+    # tts.save("output.mp3")
+    TEXT = normalizer.normalize(content)
+    VOICE = "vi-VN-HoaiMyNeural"
+    communicate = edge_tts.Communicate(TEXT, VOICE)
+    return await communicate.save(fileName)

@@ -216,10 +216,9 @@ def myStyle(log_queue):
                             #     communicate.save(OUTPUT_FILE), timeout=1
                             # )
                             fileId = f"{datetime.now().timestamp()}.mp3"
-                            OUTPUT_FILE = os.path.join(tempfile.gettempdir(), fileId)
-                            print(222222)
-                            await tts.process(TEXT, OUTPUT_FILE)
-                            print(33333)
+
+                            await tts.process(TEXT, fileId)
+
                             # Polling: Kiểm tra URL tồn tại (HEAD request nhẹ, không download full)
                             max_attempts = 12  # Max chờ ~60 giây (5s * 12)
                             # async with aiohttp.ClientSession() as session:
@@ -290,7 +289,7 @@ def myStyle(log_queue):
                                 #         **ffmpeg_options,
                                 #     )  # File audio bạn chuẩn bị
                                 source = discord.FFmpegPCMAudio(
-                                    f"./{fileId}",
+                                    f"{fileId}",
                                     **ffmpeg_options,
                                 )  # File audio bạn chuẩn bị
 
@@ -310,7 +309,7 @@ def myStyle(log_queue):
 
                                 if not current_voice_client.is_playing():
                                     current_voice_client.play(source)
-                                    os.remove(f"./{OUTPUT_FILE}")
+                                    os.remove(fileId)
                                     print("Đang play voice từ API response!")
                                 else:
                                     print("Đang play rồi → skip")

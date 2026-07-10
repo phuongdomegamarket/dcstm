@@ -140,6 +140,7 @@ def myStyle(log_queue):
     @bot.event
     async def on_ready():
         global CHANNELS, GUILD, current_voice_client, ttsKeysChannel, tts_keys
+        lock_channel=None
         print(f"Bot ready: {bot.user}")
         for guild in bot.guilds:
             if guild.name.lower() == "phượng đỏ mega":
@@ -167,7 +168,9 @@ def myStyle(log_queue):
                         ttsKeysChannel = channel
                         async for msg in channel.history():
                             tts_keys.add(msg.content)
-        bot.loop.create_task(tts_worker())
+                    elif 'lock_keys' ==channel.name.lower():
+                        lock_channel=channel
+        bot.loop.create_task(tts_worker(lock_channel))
         if not periodic_api_check.is_running():
             periodic_api_check.start(guild)
 

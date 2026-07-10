@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 from datetime import datetime, timedelta
-
+import uuid
 import edge_tts
 from vietnormalizer import VietnameseNormalizer
 
@@ -60,10 +60,58 @@ processing_lock = asyncio.Lock()
 
 tts_queue = asyncio.Queue()
 
-async def tts_worker():
+
+INSTANCE_ID = str(uuid.uuid4())  # mỗi process có 1 ID riêng biệt
+LOCK_TTL_SECONDS = 15  # tối đa 1 lần phát không nên dài hơn số này
+
+async def acquire_playback_lock(lock_channel):
+    """
+    Trả về True nếu instance này giành được quyền phát audio.
+    Trả về False nếu instance khác đang giữ khóa (chưa hết hạn).
+    """
+    now = time.time()
+
+    # Đọc message lock gần nhất
+    last_lock_thread = lock_channel.threads[0]
+
+    if last_lock_thread:
+        try:
+            data = json.loads(last_lock_thread.content)
+            holder_id = data.get("instance_id")
+            expires_at = data.get("expires_at", 0)
+
+            # Nếu khóa còn hạn và không phải của mình → bỏ qua
+            if expires_at > now and holder_id != INSTANCE_ID:
+                return False
+        except (json.JSONDecodeError, TypeError):
+            pass  # message hỏng, coi như không có khóa
+
+    # Không ai giữ khóa (hoặc khóa đã hết hạn) → mình chiếm khóa
+    lock_payload = json.dumps({
+        "instance_id": INSTANCE_ID,
+        "expires_at": now + LOCK_TTL_SECONDS,
+    })
+    await lock_channel.create_thread(name=INSTANCE_ID,content=lock_payload)
+    return True
+
+
+async def release_playback_lock(lock_channel):
+    last_lock_thread = lock_channel.threads[0]
+    """Giải phóng khóa sớm ngay sau khi phát xong, không cần đợi hết TTL."""
+    expired_payload = json.dumps({
+        "instance_id": INSTANCE_ID,
+        "expires_at": 0,  # đánh dấu hết hạn ngay lập tức
+    })
+    await last_lock_thread.edit(content=expired_payload)
+async def tts_worker(lock_channel):
     while True:
         text, thread_original, history_channel = await tts_queue.get()
         try:
+            # Xin khóa trước khi phát — nếu bot khác đang phát thì chờ & thử lại
+            while not await acquire_playback_lock(lock_channel):
+                print("Instance khác đang phát audio → chờ...")
+                await asyncio.sleep(2)
+
             file_path = tempfile.mktemp(suffix=".mp3")
             await tts.process(text, file_path)
 
@@ -80,9 +128,9 @@ async def tts_worker():
 
             source = discord.FFmpegPCMAudio(file_path, options="-vn")
             current_voice_client.play(source, after=after_play)
+            await done_event.wait()
 
-            await done_event.wait()  # đợi phát xong mới lấy audio tiếp theo trong queue
-
+            await release_playback_lock(lock_channel)  # giải phóng ngay khi xong
             await history_channel.create_thread(name=thread_original, content="done")
         except Exception as e:
             print(f"tts_worker error: {e}")

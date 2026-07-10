@@ -72,11 +72,14 @@ async def acquire_playback_lock(lock_channel):
     now = time.time()
 
     # Đọc message lock gần nhất
-    last_lock_thread = lock_channel.threads[0]
+    last_lock_thread=None
+    if(len(lock_channel.threads)>0):
+        last_lock_thread = lock_channel.threads[0]
 
     if last_lock_thread:
         try:
-            data = json.loads(last_lock_thread.content)
+            oldestMsg=[msg async for msg in last_lock_thread.history(limit=1,oldest_first=True)][0]
+            data = json.loads(oldestMsg.content)
             holder_id = data.get("instance_id")
             expires_at = data.get("expires_at", 0)
 
@@ -97,12 +100,13 @@ async def acquire_playback_lock(lock_channel):
 
 async def release_playback_lock(lock_channel):
     last_lock_thread = lock_channel.threads[0]
+    oldestMsg=[msg async for msg in last_lock_thread.history(limit=1,oldest_first=True)][0]
     """Giải phóng khóa sớm ngay sau khi phát xong, không cần đợi hết TTL."""
     expired_payload = json.dumps({
         "instance_id": INSTANCE_ID,
         "expires_at": 0,  # đánh dấu hết hạn ngay lập tức
     })
-    await last_lock_thread.edit(content=expired_payload)
+    await oldestMsg.edit(content=expired_payload)
 async def tts_worker(lock_channel):
     while True:
         text, thread_original, history_channel = await tts_queue.get()
@@ -252,7 +256,7 @@ def myStyle(log_queue):
                         )
                         entries = []
                         for line in channel.threads:
-                            print(line)
+                            # print(line)
                             m = pattern.match(line.name)
                             if not m:
                                 continue  # skip malformed lines

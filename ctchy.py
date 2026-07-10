@@ -94,7 +94,13 @@ async def acquire_playback_lock(lock_channel):
         "instance_id": INSTANCE_ID,
         "expires_at": now + LOCK_TTL_SECONDS,
     })
-    await lock_channel.create_thread(name=INSTANCE_ID,content=lock_payload)
+    tags=lock_channel.available_tags
+    expiredTag=None
+    if(len(tags)>0):
+        for tag in tags:
+            if(tag.name.lower()=='expired'):
+                expiredTag=tag
+    await lock_channel.create_thread(name=INSTANCE_ID,content=lock_payload,applied_tags=[expiredTag])
     return True
 
 
@@ -106,7 +112,15 @@ async def release_playback_lock(lock_channel):
         "instance_id": INSTANCE_ID,
         "expires_at": 0,  # đánh dấu hết hạn ngay lập tức
     })
+
     await oldestMsg.edit(content=expired_payload)
+    tags=lock_channel.available_tags
+    expiredTag=None
+    if(len(tags)>0):
+        for tag in tags:
+            if(tag.name.lower()=='expired'):
+                expiredTag=tag
+    await last_lock_thread.edit(applied_tags=[expiredTag],locked=True)
 async def tts_worker(lock_channel):
     while True:
         text, thread_original, history_channel = await tts_queue.get()

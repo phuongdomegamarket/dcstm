@@ -10,8 +10,9 @@ import sys
 import tempfile
 import threading
 import time
-from datetime import datetime, timedelta
 import uuid
+from datetime import datetime, timedelta
+
 import edge_tts
 from vietnormalizer import VietnameseNormalizer
 
@@ -64,6 +65,30 @@ tts_queue = asyncio.Queue()
 INSTANCE_ID = str(uuid.uuid4())  # mỗi process có 1 ID riêng biệt
 LOCK_TTL_SECONDS = 15  # tối đa 1 lần phát không nên dài hơn số này
 
+
+voice_connect_lock = asyncio.Lock()
+
+
+async def ensure_voice_connected(channels):
+    global current_voice_client
+    async with voice_connect_lock:
+        if current_voice_client and current_voice_client.is_connected():
+            return
+        for channel in channels:
+            if "voice transactions" in channel.name.lower():
+                while True:
+                    try:
+                        current_voice_client = await channel.connect(reconnect=True)
+                        print(f"[{INSTANCE_ID}] Connect thành công!")
+                        return
+                    except asyncio.TimeoutError:
+                        print("Timeout → thử lại...")
+                        await asyncio.sleep(10)
+                    except Exception as e:
+                        print(f"Lỗi nghiêm trọng: {e}")
+                        await asyncio.sleep(10)
+
+
 async def acquire_playback_lock(lock_channel):
     """
     Trả về True nếu instance này giành được quyền phát audio.
@@ -72,13 +97,16 @@ async def acquire_playback_lock(lock_channel):
     now = time.time()
 
     # Đọc message lock gần nhất
-    last_lock_thread=None
-    if(len(lock_channel.threads)>0):
+    last_lock_thread = None
+    if len(lock_channel.threads) > 0:
         last_lock_thread = lock_channel.threads[0]
 
     if last_lock_thread:
         try:
-            oldestMsg=[msg async for msg in last_lock_thread.history(limit=1,oldest_first=True)][0]
+            oldestMsg = [
+                msg
+                async for msg in last_lock_thread.history(limit=1, oldest_first=True)
+            ][0]
             data = json.loads(oldestMsg.content)
             holder_id = data.get("instance_id")
             expires_at = data.get("expires_at", 0)
@@ -90,37 +118,55 @@ async def acquire_playback_lock(lock_channel):
             pass  # message hỏng, coi như không có khóa
 
     # Không ai giữ khóa (hoặc khóa đã hết hạn) → mình chiếm khóa
-    lock_payload = json.dumps({
-        "instance_id": INSTANCE_ID,
-        "expires_at": now + LOCK_TTL_SECONDS,
-    })
-    tags=lock_channel.available_tags
-    expiredTag=None
-    if(len(tags)>0):
+    lock_payload = json.dumps(
+        {
+            "instance_id": INSTANCE_ID,
+            "expires_at": now + LOCK_TTL_SECONDS,
+        }
+    )
+    tags = lock_channel.available_tags
+    expiredTag = None
+    if len(tags) > 0:
         for tag in tags:
-            if(tag.name.lower()=='expired'):
-                expiredTag=tag
-    await lock_channel.create_thread(name=INSTANCE_ID,content=lock_payload,applied_tags=[expiredTag])
+            if tag.name.lower() == "expired":
+                expiredTag = tag
+    await lock_channel.create_thread(
+        name=INSTANCE_ID, content=lock_payload, applied_tags=[expiredTag]
+    )
     return True
 
 
 async def release_playback_lock(lock_channel):
     last_lock_thread = lock_channel.threads[0]
-    oldestMsg=[msg async for msg in last_lock_thread.history(limit=1,oldest_first=True)][0]
+    oldestMsg = [
+        msg async for msg in last_lock_thread.history(limit=1, oldest_first=True)
+    ][0]
     """Giải phóng khóa sớm ngay sau khi phát xong, không cần đợi hết TTL."""
-    expired_payload = json.dumps({
-        "instance_id": INSTANCE_ID,
-        "expires_at": 0,  # đánh dấu hết hạn ngay lập tức
-    })
+    expired_payload = json.dumps(
+        {
+            "instance_id": INSTANCE_ID,
+            "expires_at": 0,  # đánh dấu hết hạn ngay lập tức
+        }
+    )
 
-    await oldestMsg.edit(content=expired_payload)
-    tags=lock_channel.available_tags
-    expiredTag=None
-    if(len(tags)>0):
+    # await oldestMsg.edit(content=expired_payload)
+    try:
+        await oldestMsg.edit(content=expired_payload)
+    except discord.Forbidden:
+        # Message không phải do instance này tạo (có instance khác đang chạy)
+        print(
+            f"[{INSTANCE_ID}] Không thể release lock — có instance khác đang giữ. Bỏ qua."
+        )
+        return
+    tags = lock_channel.available_tags
+    expiredTag = None
+    if len(tags) > 0:
         for tag in tags:
-            if(tag.name.lower()=='expired'):
-                expiredTag=tag
-    await last_lock_thread.edit(applied_tags=[expiredTag],locked=True)
+            if tag.name.lower() == "expired":
+                expiredTag = tag
+    await last_lock_thread.edit(applied_tags=[expiredTag], locked=True)
+
+
 async def tts_worker(lock_channel):
     while True:
         text, thread_original, history_channel = await tts_queue.get()
@@ -154,40 +200,46 @@ async def tts_worker(lock_channel):
             print(f"tts_worker error: {e}")
         finally:
             tts_queue.task_done()
+
+
 def myStyle(log_queue):
     @bot.event
     async def on_ready():
         global CHANNELS, GUILD, current_voice_client, ttsKeysChannel, tts_keys
-        lock_channel=None
+        lock_channel = None
         print(f"Bot ready: {bot.user}")
         for guild in bot.guilds:
             if guild.name.lower() == "phượng đỏ mega":
                 GUILD = guild
                 CHANNELS = guild.channels
+                await ensure_voice_connected(CHANNELS)
                 for channel in CHANNELS:
-                    if "voice transactions" in channel.name.lower():
-                        stopped = False
-                        while not stopped:
-                            try:
-                                current_voice_client = await channel.connect()
-                                print("Connect thành công!")
-                                stopped = True
+                    if "lock_keys" == channel.name.lower():
+                        lock_channel = channel
+                # for channel in CHANNELS:
+                #     if "voice transactions" in channel.name.lower():
+                #         stopped = False
+                #         while not stopped:
+                #             try:
+                #                 current_voice_client = await channel.connect()
+                #                 print("Connect thành công!")
+                #                 stopped = True
 
-                            except asyncio.TimeoutError:
-                                print("Timeout → thử lại ngay...")
-                                await asyncio.sleep(
-                                    10
-                                )  # delay nhỏ để không spam quá nhanh
+                #             except asyncio.TimeoutError:
+                #                 print("Timeout → thử lại ngay...")
+                #                 await asyncio.sleep(
+                #                     10
+                #                 )  # delay nhỏ để không spam quá nhanh
 
-                            except Exception as e:
-                                print(f"Lỗi nghiêm trọng: {e}")
-                                await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
-                    elif "fpt-voice" in channel.name.lower():
-                        ttsKeysChannel = channel
-                        async for msg in channel.history():
-                            tts_keys.add(msg.content)
-                    elif 'lock_keys' ==channel.name.lower():
-                        lock_channel=channel
+                #             except Exception as e:
+                #                 print(f"Lỗi nghiêm trọng: {e}")
+                #                 await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
+                #     elif "fpt-voice" in channel.name.lower():
+                #         ttsKeysChannel = channel
+                #         async for msg in channel.history():
+                #             tts_keys.add(msg.content)
+                #     elif 'lock_keys' ==channel.name.lower():
+                #         lock_channel=channel
         bot.loop.create_task(tts_worker(lock_channel))
         if not periodic_api_check.is_running():
             periodic_api_check.start(guild)
@@ -227,30 +279,31 @@ def myStyle(log_queue):
             global current_voice_client, CHANNELS, processed_threads, processing
             if current_voice_client is None or not current_voice_client.is_connected():
                 print("Bot chưa join voice channel → skip play voice")
-                for channel in CHANNELS:
-                    if "voice transactions" in channel.name.lower():
-                        stopped = False
-                        while not stopped:
-                            try:
-                                current_voice_client = await channel.connect()
-                                print("Connect thành công!")
-                                stopped = True
+                await ensure_voice_connected(CHANNELS)
+                # for channel in CHANNELS:
+                #     if "voice transactions" in channel.name.lower():
+                #         stopped = False
+                #         while not stopped:
+                #             try:
+                #                 current_voice_client = await channel.connect()
+                #                 print("Connect thành công!")
+                #                 stopped = True
 
-                            except asyncio.TimeoutError:
-                                print("Timeout → thử lại ngay...")
-                                await asyncio.sleep(
-                                    10
-                                )  # delay nhỏ để không spam quá nhanh
+                #             except asyncio.TimeoutError:
+                #                 print("Timeout → thử lại ngay...")
+                #                 await asyncio.sleep(
+                #                     10
+                #                 )  # delay nhỏ để không spam quá nhanh
 
-                            except Exception as e:
-                                print(f"Lỗi nghiêm trọng: {e}")
-                                await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
-                                stopped = True
-                    elif "fpt-voice" in channel.name.lower():
-                        ttsKeysChannel = channel
-                        async for msg in channel.history():
-                            tts_keys.add(msg.content)
-                # return  # Bỏ qua nếu chưa join voice
+                #             except Exception as e:
+                #                 print(f"Lỗi nghiêm trọng: {e}")
+                #                 await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
+                #                 stopped = True
+                #     elif "fpt-voice" in channel.name.lower():
+                #         ttsKeysChannel = channel
+                #         async for msg in channel.history():
+                #             tts_keys.add(msg.content)
+                # # return  # Bỏ qua nếu chưa join voice
             if CHANNELS:
                 lastThreads = None
                 historyChannel = None
@@ -310,7 +363,9 @@ def myStyle(log_queue):
                                 TEXT = normalizer.normalize(
                                     f"đã {'nhận' if threadMeta['sign'] == '+' else 'chuyển'} {threadMeta['amount']} đồng"
                                 )
-                                await tts_queue.put((TEXT, threadMeta["original"], historyChannel))
+                                await tts_queue.put(
+                                    (TEXT, threadMeta["original"], historyChannel)
+                                )
                                 # fileId = 'output.mp3'#f"{datetime.now().timestamp()}.mp3"
                                 # await tts.process(TEXT, fileId)
                                 # if (

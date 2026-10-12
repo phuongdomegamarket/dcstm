@@ -17,3 +17,4 @@ load_dotenv
 vietnormalizer
 edge_tts
 gtts
+imageio-ffmpeg

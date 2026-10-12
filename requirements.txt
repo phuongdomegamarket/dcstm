@@ -15,6 +15,6 @@ uvicorn==0.34.0
 websockets==13.1
 load_dotenv
 vietnormalizer
-edge_tts
+edge_tts==7.2.8
 gtts
 imageio-ffmpeg

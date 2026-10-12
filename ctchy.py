@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import queue
 import re
@@ -18,6 +19,15 @@ from vietnormalizer import VietnameseNormalizer
 import tts
 
 load_dotenv()
+
+# Cấu hình logging ĐÚNG 1 LẦN cho toàn process. discord.py (bot.run) tự add
+# handler mỗi lần chạy nếu ta không tắt (log_handler=None) → sau vài lần
+# restart bởi watchdog, log bị in lặp nhiều lần cùng lúc.
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)-8s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 normalizer = VietnameseNormalizer()
 
@@ -443,7 +453,10 @@ def run_bot_once(log, token):
         print("Periodic API check started!", flush=True)
 
     log(f"[{INSTANCE_ID}] Khởi động bot...")
-    bot.run(token)
+    # log_handler=None: discord.py mặc định add 1 StreamHandler vào root logger
+    # mỗi lần bot.run() — watchdog restart nhiều lần → log bị in lặp 5-6 lần
+    # (giả tạo cảm giác "nhiều kết nối cùng lúc"). Ta cấu hình logging 1 lần duy nhất.
+    bot.run(token, log_handler=None)
 
 
 def myStyle():

@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     ffmpeg \
     build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* && ffmpeg -version | head -1
 
 # Install Node.js LTS mới nhất (từ nodesource, evergreen ~22.x)
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \

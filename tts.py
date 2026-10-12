@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Simple example to generate audio with preset voice using async/await"""
+"""Generate audio: edge-tts là chính, gTTS là dự phòng khi Microsoft trả 403."""
 
 import asyncio
 
@@ -10,21 +10,22 @@ from vietnormalizer import VietnameseNormalizer
 
 normalizer = VietnameseNormalizer()
 
-
-# from gtts import gTTS
-# from vietnormalizer import VietnameseNormalizer
-
-# normalizer = VietnameseNormalizer()
-# TEXT = normalizer.normalize("bạn vừa nhận 40039993 đồng")
-
-# tts = gTTS(TEXT, lang="vi")
-# tts.save("output.mp3")
+EDGE_VOICE = "vi-VN-HoaiMyNeural"
+EDGE_RETRIES = 2  # thử lại khi 403 thoáng qua (throttle/block tạm thời)
 
 
 async def process(content, fileName):
-    # tts = gTTS(content, lang="vi")
-    # tts.save("output.mp3")
     TEXT = normalizer.normalize(content)
-    VOICE = "vi-VN-HoaiMyNeural"
-    communicate = edge_tts.Communicate(TEXT, VOICE)
-    return await communicate.save(fileName)
+    last_error = None
+    for attempt in range(EDGE_RETRIES):
+        try:
+            communicate = edge_tts.Communicate(TEXT, EDGE_VOICE)
+            return await communicate.save(fileName)
+        except Exception as e:
+            last_error = e
+            await asyncio.sleep(1)
+    # edge-tts hỏng (thường là 403 từ Microsoft — IP cloud bị block/throttle,
+    # hoặc lệch giờ container làm hỏng token DRM) → phát mp3 bằng gTTS.
+    # gTTS là lệnh gọi mạng chặn → chạy trong thread riêng để không treo event loop.
+    print(f"edge_tts thất bại ({last_error}) → fallback sang gTTS", flush=True)
+    await asyncio.to_thread(lambda: gTTS(TEXT, lang="vi").save(fileName))

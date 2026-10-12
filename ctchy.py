@@ -8,8 +8,21 @@ import shutil
 import tempfile
 import threading
 import time
-import uuid
 
+from datetime import datetime, timedelta
+import uuid
+import edge_tts
+from vietnormalizer import VietnameseNormalizer
+
+normalizer = VietnameseNormalizer()
+from dotenv import load_dotenv
+
+# Load environment variables from the .env file
+load_dotenv()
+
+from datetime import datetime
+
+import aiohttp
 import discord
 import streamlit as st
 from discord.ext import commands, tasks
@@ -60,115 +73,6 @@ MAX_RESTART_DELAY_SECONDS = 300  # backoff tối đa khi bot crash liên tục
 PLAY_TIMEOUT_SECONDS = 120  # chờ phát 1 file tối đa bao lâu trước khi bỏ qua
 
 
-def find_ffmpeg():
-    """Tìm executable ffmpeg: PATH trước, sau đó fallback sang bundle pip.
-
-    Một số host (Streamlit Cloud rebuild, HF Space) không có ffmpeg hệ thống
-    dù packages.txt khai báo — imageio-ffmpeg cung cấp binary static qua pip.
-    """
-    found = shutil.which("ffmpeg")
-    if found:
-        return found
-    try:
-        import imageio_ffmpeg
-
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception:
-        return None
-
-
-FFMPEG_PATH = None  # set lại mỗi lần bot chạy trong run_bot_once()
-
-# Queue log dùng chung mọi session (thread bot đẩy log vào để UI hiển thị)
-log_queue = queue.Queue(maxsize=2000)
-
-thread = None
-thread_spawn_lock = threading.Lock()
-
-
-def make_logger():
-    """Ghi log ra console (cloud log) và đẩy vào queue để hiển thị trên UI."""
-
-    def log(message, level="info"):
-        print(message, flush=True)
-        try:
-            log_queue.put_nowait((level, message))
-        except Exception:
-            pass  # queue đầy / chưa có UI nào đang đọc → bỏ qua, khỏi chặn bot
-
-    return log
-
-
-def reset_runtime_state():
-    """Dọn trạng thái cũ trước khi khởi động lại bot.
-
-    bot.run() tạo event loop mới, nên các asyncio.Lock/Queue khởi tạo trên
-    loop cũ phải được thay bằng object mới.
-    """
-    global bot, current_voice_client, CHANNELS, GUILD, ttsKeysChannel
-    global processing_lock, voice_connect_lock, tts_queue
-    bot = None
-    current_voice_client = None
-    CHANNELS = None
-    GUILD = None
-    ttsKeysChannel = None
-    processing_lock = asyncio.Lock()
-    voice_connect_lock = asyncio.Lock()
-    tts_queue = asyncio.Queue()
-
-
-async def ensure_voice_connected(channels):
-    global current_voice_client
-    async with voice_connect_lock:
-        if current_voice_client and current_voice_client.is_connected():
-            return
-        for channel in channels:
-            if "voice transactions" not in channel.name.lower():
-                continue
-            guild_vc = channel.guild.voice_client
-            if guild_vc:
-                # discord.py có thể đang tự reconnect ngầm → chờ nó hoàn tất
-                # thay vì gọi connect() nữa (tránh lỗi
-                # "Already connected to a voice channel")
-                for _ in range(10):
-                    if guild_vc.is_connected():
-                        current_voice_client = guild_vc
-                        print(
-                            f"[{INSTANCE_ID}] Tái sử dụng kết nối voice sẵn có",
-                            flush=True,
-                        )
-                        return
-                    await asyncio.sleep(2)
-                # Vẫn không có kết nối nào sống → dọn object cũ rồi connect mới
-                try:
-                    await guild_vc.disconnect(force=True)
-                except Exception:
-                    pass
-            for _ in range(30):  # ~5 phút, hết giờ thì đợi chu kỳ check tiếp theo
-                try:
-                    current_voice_client = await channel.connect(
-                        reconnect=True, timeout=30.0
-                    )
-                    print(f"[{INSTANCE_ID}] Connect thành công!", flush=True)
-                    return
-                except asyncio.TimeoutError:
-                    print("Timeout → thử lại...", flush=True)
-                    await asyncio.sleep(10)
-                except discord.ClientException as e:
-                    # Có thể discord.py vừa tự reconnect xong giữa chừng
-                    guild_vc = channel.guild.voice_client
-                    if guild_vc and guild_vc.is_connected():
-                        current_voice_client = guild_vc
-                        return
-                    print(f"Lỗi kết nối voice: {e} → thử lại...", flush=True)
-                    await asyncio.sleep(10)
-                except Exception as e:
-                    print(f"Lỗi nghiêm trọng: {e}", flush=True)
-                    await asyncio.sleep(10)
-            print("Không kết nối được voice → đợi chu kỳ kiểm tra tiếp theo", flush=True)
-            return
-
-
 async def acquire_playback_lock(lock_channel):
     """
     Trả về True nếu instance này giành được quyền phát audio.
@@ -177,16 +81,13 @@ async def acquire_playback_lock(lock_channel):
     now = time.time()
 
     # Đọc message lock gần nhất
-    last_lock_thread = None
-    if len(lock_channel.threads) > 0:
+    last_lock_thread=None
+    if(len(lock_channel.threads)>0):
         last_lock_thread = lock_channel.threads[0]
 
     if last_lock_thread:
         try:
-            oldestMsg = [
-                msg
-                async for msg in last_lock_thread.history(limit=1, oldest_first=True)
-            ][0]
+            oldestMsg=[msg async for msg in last_lock_thread.history(limit=1,oldest_first=True)][0]
             data = json.loads(oldestMsg.content)
             holder_id = data.get("instance_id")
             expires_at = data.get("expires_at", 0)
@@ -198,56 +99,39 @@ async def acquire_playback_lock(lock_channel):
             pass  # message hỏng, coi như không có khóa
 
     # Không ai giữ khóa (hoặc khóa đã hết hạn) → mình chiếm khóa
-    lock_payload = json.dumps(
-        {
-            "instance_id": INSTANCE_ID,
-            "expires_at": now + LOCK_TTL_SECONDS,
-        }
-    )
-    tags = lock_channel.available_tags
-    expiredTag = None
-    if len(tags) > 0:
+    lock_payload = json.dumps({
+        "instance_id": INSTANCE_ID,
+        "expires_at": now + LOCK_TTL_SECONDS,
+    })
+    tags=lock_channel.available_tags
+    expiredTag=None
+    if(len(tags)>0):
         for tag in tags:
-            if tag.name.lower() == "expired":
-                expiredTag = tag
-    await lock_channel.create_thread(
-        name=INSTANCE_ID, content=lock_payload, applied_tags=[expiredTag]
-    )
+            if(tag.name.lower()=='expired'):
+                expiredTag=tag
+    await lock_channel.create_thread(name=INSTANCE_ID,content=lock_payload,applied_tags=[expiredTag])
     return True
 
 
 async def release_playback_lock(lock_channel):
     last_lock_thread = lock_channel.threads[0]
-    oldestMsg = [
-        msg async for msg in last_lock_thread.history(limit=1, oldest_first=True)
-    ][0]
+    oldestMsg=[msg async for msg in last_lock_thread.history(limit=1,oldest_first=True)][0]
     """Giải phóng khóa sớm ngay sau khi phát xong, không cần đợi hết TTL."""
-    expired_payload = json.dumps(
-        {
-            "instance_id": INSTANCE_ID,
-            "expires_at": 0,  # đánh dấu hết hạn ngay lập tức
-        }
-    )
+    expired_payload = json.dumps({
+        "instance_id": INSTANCE_ID,
+        "expires_at": 0,  # đánh dấu hết hạn ngay lập tức
+    })
 
-    try:
-        await oldestMsg.edit(content=expired_payload)
-    except discord.Forbidden:
-        # Message không phải do instance này tạo (có instance khác đang chạy)
-        print(
-            f"[{INSTANCE_ID}] Không thể release lock — có instance khác đang giữ. Bỏ qua.",
-            flush=True,
-        )
-        return
-    tags = lock_channel.available_tags
-    expiredTag = None
-    if len(tags) > 0:
+
+    await oldestMsg.edit(content=expired_payload)
+    tags=lock_channel.available_tags
+    expiredTag=None
+    if(len(tags)>0):
         for tag in tags:
-            if tag.name.lower() == "expired":
-                expiredTag = tag
-    await last_lock_thread.edit(applied_tags=[expiredTag], locked=True)
-
-
-async def tts_worker(lock_channel, log):
+            if(tag.name.lower()=='expired'):
+                expiredTag=tag
+    await last_lock_thread.edit(applied_tags=[expiredTag],locked=True)
+async def tts_worker(lock_channel):
     while True:
         text, thread_original, history_channel = await tts_queue.get()
         try:
@@ -303,42 +187,44 @@ async def tts_worker(lock_channel, log):
             log(f"tts_worker error: {e}", "error")
         finally:
             tts_queue.task_done()
-
-
-def run_bot_once(log, token):
-    """Tạo một instance bot hoàn toàn mới và chạy cho tới khi bot lỗi/thoát."""
-    global bot
-    bot = commands.Bot(command_prefix="!", intents=intents)
-
-    global FFMPEG_PATH
-    FFMPEG_PATH = find_ffmpeg()
-    if FFMPEG_PATH:
-        log(f"FFmpeg: {FFMPEG_PATH}")
-    else:
-        log("KHÔNG tìm thấy ffmpeg → TTS sẽ không phát được audio!", "error")
-
+def myStyle(log_queue):
     @bot.event
     async def on_ready():
-        global CHANNELS, GUILD, current_voice_client
-        lock_channel = None
-        log(f"Bot ready: {bot.user}")
+        global CHANNELS, GUILD, current_voice_client, ttsKeysChannel, tts_keys
+        lock_channel=None
+        print(f"Bot ready: {bot.user}")
         for guild in bot.guilds:
             if guild.name.lower() == "phượng đỏ mega":
                 GUILD = guild
                 CHANNELS = guild.channels
-                await ensure_voice_connected(CHANNELS)
                 for channel in CHANNELS:
-                    if "lock_keys" == channel.name.lower():
-                        lock_channel = channel
-        if lock_channel is None:
-            log("Không tìm thấy channel 'lock_keys' → không thể phát audio", "error")
-        # on_ready fire lại sau mỗi lần resume → chỉ tạo worker đúng 1 lần/bot
-        # (tránh nhiều worker cùng bốc queue → phát audio trùng nhau)
-        if lock_channel and not getattr(bot, "_tts_worker_started", False):
-            bot._tts_worker_started = True
-            bot.loop.create_task(tts_worker(lock_channel, log))
-        if GUILD and not periodic_api_check.is_running():
-            periodic_api_check.start(GUILD)
+
+                    if "voice transactions" in channel.name.lower():
+                        stopped = False
+                        while not stopped:
+                            try:
+                                current_voice_client = await channel.connect()
+                                print("Connect thành công!")
+                                stopped = True
+
+                            except asyncio.TimeoutError:
+                                print("Timeout → thử lại ngay...")
+                                await asyncio.sleep(
+                                    10
+                                )  # delay nhỏ để không spam quá nhanh
+
+                            except Exception as e:
+                                print(f"Lỗi nghiêm trọng: {e}")
+                                await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
+                    elif "fpt-voice" in channel.name.lower():
+                        ttsKeysChannel = channel
+                        async for msg in channel.history():
+                            tts_keys.add(msg.content)
+                    elif 'lock_keys' ==channel.name.lower():
+                        lock_channel=channel
+        bot.loop.create_task(tts_worker(lock_channel))
+        if not periodic_api_check.is_running():
+            periodic_api_check.start(guild)
 
     @bot.event
     async def on_message(message):
@@ -381,8 +267,32 @@ def run_bot_once(log, token):
         try:
             global current_voice_client, CHANNELS, processed_threads
             if current_voice_client is None or not current_voice_client.is_connected():
-                print("Bot chưa join voice channel → tự kết nối lại", flush=True)
-                await ensure_voice_connected(CHANNELS)
+
+                print("Bot chưa join voice channel → skip play voice")
+                for channel in CHANNELS:
+                    if "voice transactions" in channel.name.lower():
+                        stopped = False
+                        while not stopped:
+                            try:
+                                current_voice_client = await channel.connect()
+                                print("Connect thành công!")
+                                stopped = True
+
+                            except asyncio.TimeoutError:
+                                print("Timeout → thử lại ngay...")
+                                await asyncio.sleep(
+                                    10
+                                )  # delay nhỏ để không spam quá nhanh
+
+                            except Exception as e:
+                                print(f"Lỗi nghiêm trọng: {e}")
+                                await asyncio.sleep(10)  # delay dài hơn nếu lỗi khác
+                                stopped = True
+                    elif "fpt-voice" in channel.name.lower():
+                        ttsKeysChannel = channel
+                        async for msg in channel.history():
+                            tts_keys.add(msg.content)
+                # return  # Bỏ qua nếu chưa join voice
             if CHANNELS:
                 lastThreads = None
                 historyChannel = None
@@ -441,9 +351,53 @@ def run_bot_once(log, token):
                                 TEXT = normalizer.normalize(
                                     f"đã {'nhận' if threadMeta['sign'] == '+' else 'chuyển'} {threadMeta['amount']} đồng"
                                 )
-                                await tts_queue.put(
-                                    (TEXT, threadMeta["original"], historyChannel)
-                                )
+
+                                await tts_queue.put((TEXT, threadMeta["original"], historyChannel))
+                                # fileId = 'output.mp3'#f"{datetime.now().timestamp()}.mp3"
+                                # await tts.process(TEXT, fileId)
+                                # if (
+                                #     not current_voice_client.is_playing()
+                                # ):  # Thay logic của bạn
+                                #     # def play_next_audio(error, meta):
+                                #     #     if error:
+                                #     #         print(f"File đầu tiên lỗi: {error}")
+
+                                #     #     # Phát file thứ hai (URL TTS)
+                                #     #     if not current_voice_client.is_playing():
+                                #     #         try:
+                                #     #             source2 = discord.FFmpegPCMAudio(
+                                #     #                 str(audioUrl),  # URL TTS
+                                #     #                 **ffmpeg_options,
+                                #     #             )
+                                #     #             current_voice_client.play(
+                                #     #                 source2,
+                                #     #                 after=lambda e, meta1=meta: (
+                                #     #                     bot.loop.create_task(
+                                #     #                         onComplete(e, meta1)
+                                #     #                     )
+                                #     #                 ),  # callback khi file 2 xong
+                                #     #             )
+                                #     #             print("Đang phát file thứ hai (TTS URL)")
+                                #     #         except Exception as ex:
+                                #     #             print(f"Lỗi phát file thứ hai: {ex}")
+                                #     #     else:
+                                #     #         print("Đang phát rồi, không queue file thứ hai")
+                                #     ffmpeg_options = {"options": "-vn"}  # Chỉ audio
+                                #     source = discord.FFmpegPCMAudio(
+                                #         f"{fileId}",
+                                #         **ffmpeg_options,
+                                #     )
+                                #     if not current_voice_client.is_playing():
+                                #         current_voice_client.play(source)
+                                #         await asyncio.sleep(1)
+                                #         print("Đang play voice từ API response!")
+                                #         await historyChannel.create_thread(
+                                #             name=threadMeta["original"], content="done"
+                                #         )
+                                #         print("Voice played OK")
+                                #     else:
+                                #         print("Đang play rồi → skip")
+
         except Exception as e:
             print(e, flush=True)
 

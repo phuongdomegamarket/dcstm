@@ -130,6 +130,8 @@ async def acquire_playback_lock(lock_channel):
         for tag in tags:
             if tag.name.lower() == "expired":
                 expiredTag = tag
+    if not expiredTag:
+        expiredTag=await lock_channel.create_tag(name='expired')
     await lock_channel.create_thread(
         name=INSTANCE_ID, content=lock_payload, applied_tags=[expiredTag]
     )
@@ -175,12 +177,10 @@ async def tts_worker(lock_channel):
             while not await acquire_playback_lock(lock_channel):
                 print("Instance khác đang phát audio → chờ...")
                 await asyncio.sleep(2)
-
             file_path = tempfile.mktemp(suffix=".mp3")
             await tts.process(text, file_path)
 
             done_event = asyncio.Event()
-
             def after_play(error, path=file_path):
                 if error:
                     print(f"Lỗi playback: {error}")

@@ -10,7 +10,7 @@ from vietnormalizer import VietnameseNormalizer
 
 normalizer = VietnameseNormalizer()
 
-EDGE_VOICE = "vi-VN-HoaiMyNeural"
+EDGE_VOICE = "vi-VN-NamMinhNeural"
 EDGE_RETRIES = 2  # thử lại khi 403 thoáng qua (throttle/block tạm thời)
 
 

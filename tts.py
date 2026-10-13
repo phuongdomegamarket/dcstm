@@ -14,7 +14,6 @@ trước khi phải đi tới gTTS.
 """
 
 import asyncio
-import os
 import wave
 from pathlib import Path
 
@@ -27,11 +26,30 @@ normalizer = VietnameseNormalizer()
 EDGE_VOICE = "vi-VN-HoaiMyNeural"
 EDGE_RETRIES = 2  # thử lại khi 403 thoáng qua (throttle/block tạm thời)
 
-# Piper: model tải về sẵn trong repo tại voices/ (không tải lúc runtime
-# để tránh phụ thuộc mạng thêm một tầng nữa).
-_PIPER_MODEL = Path(__file__).parent / "voices" / "vi_VN-vais1000-medium.onnx"
+# Piper: model nằm trong voices/ (bên ngoài git vì nặng 63MB).
+# Nếu chưa có (máy mới / container cloud mới khởi động) → tự tải từ
+# HuggingFace đúng 1 lần rồi cache. Thất bại → piper tắt, còn edge/gTTS.
+_PIPER_DIR = Path(__file__).parent / "voices"
+_PIPER_MODEL = _PIPER_DIR / "vi_VN-vais1000-medium.onnx"
+_PIPER_MODEL_URL = (
+    "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+    "vi/vi_VN/vais1000/medium/vi_VN-vais1000-medium.onnx"
+)
+_PIPER_CONFIG_URL = _PIPER_MODEL_URL + ".json"
 _piper_voice = None
 _piper_load_failed = False
+
+
+def _download_piper_model():
+    """Tải model + config về voices/ nếu thiếu (chạy trong thread riêng)."""
+    import urllib.request
+
+    _PIPER_DIR.mkdir(parents=True, exist_ok=True)
+    config_path = Path(str(_PIPER_MODEL) + ".json")
+    if not _PIPER_MODEL.exists():
+        urllib.request.urlretrieve(_PIPER_MODEL_URL, _PIPER_MODEL)
+    if not config_path.exists():
+        urllib.request.urlretrieve(_PIPER_CONFIG_URL, config_path)
 
 
 def _get_piper_voice():
@@ -39,13 +57,14 @@ def _get_piper_voice():
     global _piper_voice, _piper_load_failed
     if _piper_voice is not None or _piper_load_failed:
         return _piper_voice
-    if not _PIPER_MODEL.exists():
-        _piper_load_failed = True
-        return None
     try:
         from piper import PiperVoice
 
+        if not _PIPER_MODEL.exists():
+            print("piper: chưa có model → tải từ HuggingFace (63MB, 1 lần duy nhất)", flush=True)
+            _download_piper_model()
         _piper_voice = PiperVoice.load(str(_PIPER_MODEL))
+        print("piper: model sẵn sàng", flush=True)
     except Exception as e:
         print(f"piper load thất bại ({e}) → bỏ qua piper, chỉ còn edge/gTTS", flush=True)
         _piper_load_failed = True

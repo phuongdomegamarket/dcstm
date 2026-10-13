@@ -18,3 +18,4 @@ vietnormalizer
 edge_tts==7.2.8
 gtts
 imageio-ffmpeg
+piper-tts==1.8.0

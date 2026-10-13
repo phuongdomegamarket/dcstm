@@ -2,7 +2,9 @@
 node_modules/
 
 test.*
+test_piper.*
 .devcontainer
 .github
 __pycache__
 *_bu.py
+voices/

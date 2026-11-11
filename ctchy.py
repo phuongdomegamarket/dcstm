@@ -75,7 +75,9 @@ async def ensure_voice_connected(channels):
         if current_voice_client and current_voice_client.is_connected():
             return
         for channel in channels:
-            if "voice transactions" in channel.name.lower():
+            # Tên kênh trên server có thể chứa ký tự xuống dòng ("voice\ntransactions")
+            # nên phải chuẩn hoá whitespace trước khi so khớp.
+            if "voice transactions" in " ".join(channel.name.lower().split()):
                 while True:
                     try:
                         current_voice_client = await channel.connect(reconnect=True)
